@@ -3,6 +3,7 @@
 # @Author   :mingdv
 # @File     :no_proxy.py
 # @Software :PyCharm
+
 import asyncio
 import random
 import ssl
@@ -25,7 +26,7 @@ async def check_internet():
             async with aiohttp.ClientSession() as session:
                 async with session.get('https://www.google.com', timeout=5):
                     return True
-        except aiohttp.ClientError:
+        except (aiohttp.ClientError, asyncio.TimeoutError):
             logger.warning(f"Internet check failed. Retrying in {retry_delay} seconds...")
             await asyncio.sleep(retry_delay)
             retry_delay *= 2  # Exponential backoff
@@ -71,55 +72,58 @@ async def connect_to_wss(user_id):
                         await websocket.close()
                         break
 
-                    response = await websocket.recv()
-                    message = json.loads(response)
-                    logger.info(message)
-                    if message.get("action") == "AUTH":
-                        auth_response = {
-                            "id": message["id"],
-                            "origin_action": "AUTH",
-                            "result": {
-                                "browser_id": device_id,
-                                "user_id": user_id,
-                                "user_agent": custom_headers['User-Agent'],
-                                "timestamp": int(time.time()),
-                                "device_type": "extension",
-                                "version": "2.5.0"
+                    try:
+                        response = await websocket.recv()
+                        message = json.loads(response)
+                        logger.info(message)
+                        if message.get("action") == "AUTH":
+                            auth_response = {
+                                "id": message["id"],
+                                "origin_action": "AUTH",
+                                "result": {
+                                    "browser_id": device_id,
+                                    "user_id": user_id,
+                                    "user_agent": custom_headers['User-Agent'],
+                                    "timestamp": int(time.time()),
+                                    "device_type": "extension",
+                                    "version": "2.5.0"
+                                }
                             }
-                        }
-                        logger.debug(auth_response)
-                        await websocket.send(json.dumps(auth_response))
+                            logger.debug(auth_response)
+                            await websocket.send(json.dumps(auth_response))
 
-                    elif message.get("action") == "PONG":
-                        pong_response = {"id": message["id"], "origin_action": "PONG"}
-                        logger.debug(pong_response)
-                        await websocket.send(json.dumps(pong_response))
+                        elif message.get("action") == "PONG":
+                            pong_response = {"id": message["id"], "origin_action": "PONG"}
+                            logger.debug(pong_response)
+                            await websocket.send(json.dumps(pong_response))
 
-        except websockets.ConnectionClosedError as e:
-            logger.error(f"WebSocket connection closed: {e}")
-            if "Device creation limit exceeded" in str(e):
-                # Exponential backoff strategy for handling the device limit exceeded error
+                    except (websockets.ConnectionClosedError, websockets.ConnectionClosedOK) as e:
+                        logger.warning(f"WebSocket connection closed: {e}")
+                        break
+                    except asyncio.TimeoutError:
+                        logger.warning("Timeout while waiting for WebSocket response. Retrying...")
+                        continue
+
+        except websockets.InvalidStatusCode as e:
+            logger.error(f"WebSocket connection failed with status code: {e.status_code}")
+            if e.status_code == 4000 and "Device creation limit exceeded" in str(e):
                 backoff_time = 60  # Initial backoff time in seconds
                 while True:
                     logger.warning(f"Device creation limit exceeded. Retrying in {backoff_time} seconds...")
                     await asyncio.sleep(backoff_time)
-                    backoff_time *= 2
-                    if backoff_time > 3600:  # Cap the backoff time at 1 hour
-                        backoff_time = 3600
+                    backoff_time = min(backoff_time * 2, 3600)  # Exponential backoff capped at 1 hour
                     if await check_internet():
                         break
 
         except Exception as e:
-            logger.error(e)
+            logger.error(f"Unexpected error: {e}")
 
         logger.info("Reconnecting to WebSocket server...")
         await asyncio.sleep(5)
 
 async def main():
-    # TODO 修改user_id
     _user_id = '2fFkGwQCG17m9v20ruvyWcPzdv1'
     await connect_to_wss(_user_id)
 
 if __name__ == '__main__':
-    # 运行主函数
     asyncio.run(main())

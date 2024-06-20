@@ -72,16 +72,22 @@ async def connect_to_wss(socks5_proxy, user_id):
 
 
 async def main():
-    # TODO 修改user_id
-    _user_id = 'user_id'
-    # TODO 修改代理列表
+    _user_id = '2fFkGwQCG17m9v20ruvyWcPzdv1'
     socks5_proxy_list = [
-        'socks5://user:pwd@ip:port',
+        'socks5://rppnojlv:6bsvgls60dts@38.154.227.167:5868',
+        'socks5://rppnojlv:6bsvgls60dts@185.199.229.156:7492',
+        'socks5://rppnojlv:6bsvgls60dts@185.199.228.220:7300',
+        'socks5://rppnojlv:6bsvgls60dts@185.199.231.45:8382',
+        'socks5://rppnojlv:6bsvgls60dts@188.74.210.207:6286',
+        'socks5://rppnojlv:6bsvgls60dts@188.74.183.10:8279',
+        'socks5://rppnojlv:6bsvgls60dts@188.74.210.21:6100',
+        'socks5://rppnojlv:6bsvgls60dts@45.155.68.129:8133',
+        'socks5://rppnojlv:6bsvgls60dts@154.95.36.199:6893',
+        'socks5://rppnojlv:6bsvgls60dts@45.94.47.66:8110'
     ]
     tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in socks5_proxy_list]
     await asyncio.gather(*tasks)
 
 
 if __name__ == '__main__':
-    # # 运行主函数
     asyncio.run(main())
