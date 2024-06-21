@@ -1,8 +1,4 @@
-# -*- coding: utf-8 -*-
-# @Time     :2023/12/26 18:08
-# @Author   :mingdv
-# @File     :no_proxy.py
-# @Software :PyCharm
+# Copyright © 2024 Mingdv. All rights reserved.
 
 import asyncio
 import random
