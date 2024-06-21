@@ -14,6 +14,21 @@ import aiohttp
 
 import websockets
 from loguru import logger
+import winreg
+
+REGISTRY_KEY = r"Software\MyApp"
+REGISTRY_VALUE = "device_id"
+
+def get_device_id():
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY, 0, winreg.KEY_READ) as key:
+            device_id, _ = winreg.QueryValueEx(key, REGISTRY_VALUE)
+            return device_id
+    except FileNotFoundError:
+        device_id = str(uuid.uuid4())
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY) as key:
+            winreg.SetValueEx(key, REGISTRY_VALUE, 0, winreg.REG_SZ, device_id)
+        return device_id
 
 async def check_internet():
     """Check internet connection by sending a request to a reliable server with retries."""
@@ -34,7 +49,7 @@ async def check_internet():
     return False
 
 async def connect_to_wss(user_id):
-    device_id = str(uuid.uuid4())
+    device_id = get_device_id()
     logger.info(device_id)
 
     while True:
@@ -46,7 +61,7 @@ async def connect_to_wss(user_id):
         try:
             await asyncio.sleep(random.randint(1, 10) / 10)
             custom_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
             }
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
@@ -86,7 +101,8 @@ async def connect_to_wss(user_id):
                                     "user_agent": custom_headers['User-Agent'],
                                     "timestamp": int(time.time()),
                                     "device_type": "extension",
-                                    "version": "2.5.0"
+                                    "version": "4.20.2",
+                                    "extension_id": "lkbnfiajjmbhnfledhphioinpickokdi"
                                 }
                             }
                             logger.debug(auth_response)
