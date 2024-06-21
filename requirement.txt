@@ -1,4 +1,3 @@
 websockets
 loguru
 aiohttp
-pyinstaller
