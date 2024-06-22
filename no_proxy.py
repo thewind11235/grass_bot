@@ -9,33 +9,37 @@ import uuid
 import aiohttp
 import websockets
 from loguru import logger
-import winreg
+import os
 
-REGISTRY_KEY = r"Software\Mining\Grass"
+# Đường dẫn thư mục lưu trữ thông tin
+STORAGE_DIR = "user_data"
+
+# Tạo thư mục lưu trữ nếu chưa tồn tại
+if not os.path.exists(STORAGE_DIR):
+    os.makedirs(STORAGE_DIR)
 
 def get_device_id(user_id):
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY, 0, winreg.KEY_READ) as key:
-            device_id, _ = winreg.QueryValueEx(key, user_id + "_device_id")
-            return device_id
-    except FileNotFoundError:
+    device_id_file = os.path.join(STORAGE_DIR, f"{user_id}_device_id.txt")
+    if os.path.exists(device_id_file):
+        with open(device_id_file, 'r') as file:
+            return file.read().strip()
+    else:
         device_id = str(uuid.uuid4())
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY) as key:
-            winreg.SetValueEx(key, user_id + "_device_id", 0, winreg.REG_SZ, device_id)
+        with open(device_id_file, 'w') as file:
+            file.write(device_id)
         return device_id
 
 def save_session_info(session_info, user_id):
-    session_info_str = json.dumps(session_info)
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY) as key:
-        winreg.SetValueEx(key, user_id + "_session_info", 0, winreg.REG_SZ, session_info_str)
+    session_info_file = os.path.join(STORAGE_DIR, f"{user_id}_session_info.json")
+    with open(session_info_file, 'w') as file:
+        json.dump(session_info, file)
 
 def load_session_info(user_id):
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY, 0, winreg.KEY_READ) as key:
-            session_info_str, _ = winreg.QueryValueEx(key, user_id + "_session_info")
-            return json.loads(session_info_str)
-    except (FileNotFoundError, ValueError):
-        return None
+    session_info_file = os.path.join(STORAGE_DIR, f"{user_id}_session_info.json")
+    if os.path.exists(session_info_file):
+        with open(session_info_file, 'r') as file:
+            return json.load(file)
+    return None
 
 async def check_internet():
     retry_delay = 5
@@ -68,7 +72,7 @@ async def connect_to_wss(user_id):
         try:
             await asyncio.sleep(random.randint(1, 10) / 10)
             custom_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
             }
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
@@ -179,7 +183,7 @@ async def main():
         '2iFO1GQbp33mKFcEYGnB7Hf4Oxt',
         '2iFO9qhAHxajcH5KLWVoUuMCU6x',
         '2iFONSZeCi85foRPtMnUvNo4ZgX'
-        ]
+    ]
     await asyncio.gather(*(connect_to_wss(user_id) for user_id in user_ids))
 
 if __name__ == '__main__':
