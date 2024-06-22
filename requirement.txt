@@ -2,3 +2,4 @@ websockets
 loguru
 aiohttp
 winreg
+pyinstaller
