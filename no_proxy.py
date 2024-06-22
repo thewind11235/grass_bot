@@ -58,117 +58,118 @@ async def check_internet():
             retries += 1
     return False
 
-async def connect_to_wss(user_id):
-    device_id = get_device_id(user_id)
-    logger.info(f"Device ID for user {user_id}: {device_id}")
-    session_info = load_session_info(user_id)
+async def connect_to_wss(user_id, semaphore):
+    async with semaphore:
+        device_id = get_device_id(user_id)
+        logger.info(f"Device ID for user {user_id}: {device_id}")
+        session_info = load_session_info(user_id)
 
-    while True:
-        if not await check_internet():
-            logger.warning("No internet connection. Waiting to reconnect...")
-            await asyncio.sleep(5)
-            continue
+        while True:
+            if not await check_internet():
+                logger.warning("No internet connection. Waiting to reconnect...")
+                await asyncio.sleep(5)
+                continue
 
-        try:
-            await asyncio.sleep(random.randint(1, 10) / 10)
-            custom_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            }
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            uri = "wss://proxy.wynd.network:4650/"
-            server_hostname = "proxy.wynd.network"
-            async with websockets.connect(uri, ssl=ssl_context, extra_headers=custom_headers,
-                                          server_hostname=server_hostname) as websocket:
+            try:
+                await asyncio.sleep(random.randint(1, 10) / 10)
+                custom_headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                }
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                uri = "wss://proxy.wynd.network:4650/"
+                server_hostname = "proxy.wynd.network"
+                async with websockets.connect(uri, ssl=ssl_context, extra_headers=custom_headers,
+                                              server_hostname=server_hostname) as websocket:
 
-                async def send_ping():
+                    async def send_ping():
+                        while True:
+                            send_message = json.dumps(
+                                {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
+                            logger.debug(send_message)
+                            await websocket.send(send_message)
+                            await asyncio.sleep(120)
+
+                    asyncio.create_task(send_ping())
+
                     while True:
-                        send_message = json.dumps(
-                            {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
-                        logger.debug(send_message)
-                        await websocket.send(send_message)
-                        await asyncio.sleep(120)
+                        if not await check_internet():
+                            logger.warning("Internet connection lost. Closing WebSocket connection.")
+                            await websocket.close()
+                            break
 
-                asyncio.create_task(send_ping())
+                        try:
+                            response = await websocket.recv()
+                            message = json.loads(response)
+                            logger.info(message)
 
-                while True:
-                    if not await check_internet():
-                        logger.warning("Internet connection lost. Closing WebSocket connection.")
-                        await websocket.close()
-                        break
-
-                    try:
-                        response = await websocket.recv()
-                        message = json.loads(response)
-                        logger.info(message)
-
-                        if message.get("action") == "AUTH":
-                            if session_info and session_info.get("token"):
-                                auth_response = {
-                                    "id": message["id"],
-                                    "origin_action": "AUTH",
-                                    "result": {
-                                        "token": session_info["token"],
-                                        "device_id": device_id,
-                                        "user_id": user_id,
-                                        "user_agent": custom_headers['User-Agent'],
-                                        "timestamp": int(time.time()),
-                                        "device_type": "extension",
-                                        "version": "4.20.2",
-                                        "extension_id": "lkbnfiajjmbhnfledhphioinpickokdi"
+                            if message.get("action") == "AUTH":
+                                if session_info and session_info.get("token"):
+                                    auth_response = {
+                                        "id": message["id"],
+                                        "origin_action": "AUTH",
+                                        "result": {
+                                            "token": session_info["token"],
+                                            "device_id": device_id,
+                                            "user_id": user_id,
+                                            "user_agent": custom_headers['User-Agent'],
+                                            "timestamp": int(time.time()),
+                                            "device_type": "extension",
+                                            "version": "4.20.2",
+                                            "extension_id": "lkbnfiajjmbhnfledhphioinpickokdi"
+                                        }
                                     }
-                                }
-                            else:
-                                auth_response = {
-                                    "id": message["id"],
-                                    "origin_action": "AUTH",
-                                    "result": {
-                                        "browser_id": device_id,
-                                        "user_id": user_id,
-                                        "user_agent": custom_headers['User-Agent'],
-                                        "timestamp": int(time.time()),
-                                        "device_type": "extension",
-                                        "version": "4.20.2",
-                                        "extension_id": "lkbnfiajjmbhnfledhphioinpickokdi"
+                                else:
+                                    auth_response = {
+                                        "id": message["id"],
+                                        "origin_action": "AUTH",
+                                        "result": {
+                                            "browser_id": device_id,
+                                            "user_id": user_id,
+                                            "user_agent": custom_headers['User-Agent'],
+                                            "timestamp": int(time.time()),
+                                            "device_type": "extension",
+                                            "version": "4.20.2",
+                                            "extension_id": "lkbnfiajjmbhnfledhphioinpickokdi"
+                                        }
                                     }
-                                }
-                            logger.debug(auth_response)
-                            await websocket.send(json.dumps(auth_response))
+                                logger.debug(auth_response)
+                                await websocket.send(json.dumps(auth_response))
 
-                        elif message.get("action") == "PONG":
-                            pong_response = {"id": message["id"], "origin_action": "PONG"}
-                            logger.debug(pong_response)
-                            await websocket.send(json.dumps(pong_response))
+                            elif message.get("action") == "PONG":
+                                pong_response = {"id": message["id"], "origin_action": "PONG"}
+                                logger.debug(pong_response)
+                                await websocket.send(json.dumps(pong_response))
 
-                        elif message.get("action") == "AUTH_SUCCESS":
-                            token = message["result"]["token"]
-                            session_info = {"token": token}
-                            save_session_info(session_info, user_id)
+                            elif message.get("action") == "AUTH_SUCCESS":
+                                token = message["result"]["token"]
+                                session_info = {"token": token}
+                                save_session_info(session_info, user_id)
 
-                    except (websockets.ConnectionClosedError, websockets.ConnectionClosedOK) as e:
-                        logger.warning(f"WebSocket connection closed: {e}")
-                        break
-                    except asyncio.TimeoutError:
-                        logger.warning("Timeout while waiting for WebSocket response. Retrying...")
-                        continue
+                        except (websockets.ConnectionClosedError, websockets.ConnectionClosedOK) as e:
+                            logger.warning(f"WebSocket connection closed: {e}")
+                            break
+                        except asyncio.TimeoutError:
+                            logger.warning("Timeout while waiting for WebSocket response. Retrying...")
+                            continue
 
-        except websockets.InvalidStatusCode as e:
-            logger.error(f"WebSocket connection failed with status code: {e.status_code}")
-            if e.status_code == 4000 and "Device creation limit exceeded" in str(e):
-                backoff_time = 60
-                while True:
-                    logger.warning(f"Device creation limit exceeded. Retrying in {backoff_time} seconds...")
-                    await asyncio.sleep(backoff_time)
-                    backoff_time = min(backoff_time * 2, 3600)
-                    if await check_internet():
-                        break
+            except websockets.InvalidStatusCode as e:
+                logger.error(f"WebSocket connection failed with status code: {e.status_code}")
+                if e.status_code == 4000 and "Device creation limit exceeded" in str(e):
+                    backoff_time = 60
+                    while True:
+                        logger.warning(f"Device creation limit exceeded. Retrying in {backoff_time} seconds...")
+                        await asyncio.sleep(backoff_time)
+                        backoff_time = min(backoff_time * 2, 3600)
+                        if await check_internet():
+                            break
 
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error: {e}")
 
-        logger.info("Reconnecting to WebSocket server...")
-        await asyncio.sleep(5)
+            logger.info("Reconnecting to WebSocket server...")
+            await asyncio.sleep(5)
 
 async def main():
     user_ids = [
@@ -184,7 +185,12 @@ async def main():
         '2iFO9qhAHxajcH5KLWVoUuMCU6x',
         '2iFONSZeCi85foRPtMnUvNo4ZgX'
     ]
-    await asyncio.gather(*(connect_to_wss(user_id) for user_id in user_ids))
+
+    # Giới hạn số lượng kết nối đồng thời
+    max_concurrent_connections = 1
+    semaphore = asyncio.Semaphore(max_concurrent_connections)
+
+    await asyncio.gather(*(connect_to_wss(user_id, semaphore) for user_id in user_ids))
 
 if __name__ == '__main__':
     asyncio.run(main())
