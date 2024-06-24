@@ -72,7 +72,7 @@ async def connect_to_wss(user_id):
                             {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
                         logger.debug(send_message)
                         await websocket.send(send_message)
-                        await asyncio.sleep(20)
+                        await asyncio.sleep(120)
 
                 await asyncio.sleep(1)
                 asyncio.create_task(send_ping())
