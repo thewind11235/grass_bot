@@ -1,3 +1,8 @@
 no_proxy.spec
 dist/*
 build/*
+device_id/*
+device_id.txt
+http_socks.txt
+socks5_proxy.txt
+socks5_list.txt

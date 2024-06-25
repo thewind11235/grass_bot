@@ -1,8 +1,4 @@
-# -*- coding: utf-8 -*-
-# @Time     :2023/12/26 18:08
-# @Author   :mingdv
-# @File     :no_proxy.py
-# @Software :PyCharm
+# Copyright © 2024 Mingdv. All rights reserved.
 
 import asyncio
 import random
@@ -11,21 +7,30 @@ import json
 import time
 import uuid
 import aiohttp
-
-import websockets
 from loguru import logger
+import websockets
+from websockets_proxy import Proxy, proxy_connect
 import os
 
-# Use the current directory for storing device_id.txt
-DEVICE_ID_FILE = os.path.join(os.getcwd(), "device_id.txt")
+# Directory to store device ID files
+DEVICE_ID_DIR = os.path.join(os.getcwd(), "device_id")
 
-def get_device_id():
-    if os.path.exists(DEVICE_ID_FILE):
-        with open(DEVICE_ID_FILE, "r") as file:
+# Ensure the directory exists
+if not os.path.exists(DEVICE_ID_DIR):
+    os.makedirs(DEVICE_ID_DIR)
+
+def get_device_id_file(proxy):
+    sanitized_proxy = proxy.replace(":", "_").replace("/", "_").replace("@", "_")
+    return os.path.join(DEVICE_ID_DIR, f"device_id_{sanitized_proxy}.txt")
+
+def get_device_id(proxy):
+    device_id_file = get_device_id_file(proxy)
+    if os.path.exists(device_id_file):
+        with open(device_id_file, "r") as file:
             return file.read().strip()
     else:
         device_id = str(uuid.uuid4())
-        with open(DEVICE_ID_FILE, "w") as file:
+        with open(device_id_file, "w") as file:
             file.write(device_id)
         return device_id
 
@@ -47,8 +52,8 @@ async def check_internet():
             retries += 1
     return False
 
-async def connect_to_wss(user_id):
-    device_id = get_device_id()
+async def connect_to_wss(socks5_proxy, user_id):
+    device_id = get_device_id(socks5_proxy)
     logger.info(device_id)
 
     while True:
@@ -67,15 +72,16 @@ async def connect_to_wss(user_id):
             ssl_context.verify_mode = ssl.CERT_NONE
             uri = "wss://proxy.wynd.network:4650/"
             server_hostname = "proxy.wynd.network"
-            async with websockets.connect(uri, ssl=ssl_context, extra_headers=custom_headers,
-                                          server_hostname=server_hostname) as websocket:
+            proxy = Proxy.from_url(socks5_proxy)
+            async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname,
+                                     extra_headers=custom_headers) as websocket:
                 async def send_ping():
                     while True:
                         send_message = json.dumps(
                             {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
                         logger.debug(send_message)
                         await websocket.send(send_message)
-                        await asyncio.sleep(20)
+                        await asyncio.sleep(120)
 
                 await asyncio.sleep(1)
                 asyncio.create_task(send_ping())
@@ -138,7 +144,13 @@ async def connect_to_wss(user_id):
 
 async def main():
     _user_id = '2fFkGwQCG17m9v20ruvyWcPzdv1'
-    await connect_to_wss(_user_id)
+
+    # Read proxy list from file
+    with open('socks5_list.txt', 'r') as file:
+        socks5_proxy_list = [line.strip() for line in file.readlines() if line.strip()]
+
+    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in socks5_proxy_list]
+    await asyncio.gather(*tasks)
 
 if __name__ == '__main__':
     asyncio.run(main())
