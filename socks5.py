@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright © 2024 Mingdv. All rights reserved.
 
 import asyncio
@@ -54,7 +55,7 @@ async def check_internet():
 
 async def connect_to_wss(socks5_proxy, user_id):
     device_id = get_device_id(socks5_proxy)
-    logger.info(device_id)
+    logger.info(f"Connecting to WebSocket server with device_id: {device_id} and proxy: {socks5_proxy}")
 
     while True:
         if not await check_internet():
@@ -81,7 +82,7 @@ async def connect_to_wss(socks5_proxy, user_id):
                             {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
                         logger.debug(send_message)
                         await websocket.send(send_message)
-                        await asyncio.sleep(120)
+                        await asyncio.sleep(60)
 
                 await asyncio.sleep(1)
                 asyncio.create_task(send_ping())
@@ -137,7 +138,7 @@ async def connect_to_wss(socks5_proxy, user_id):
                         break
 
         except Exception as e:
-            logger.error(f"Unexpected error: {e}")
+            logger.error(f"Unexpected error with user_id {user_id} and proxy {socks5_proxy}: {e}")
 
         logger.info("Reconnecting to WebSocket server...")
         await asyncio.sleep(5)
@@ -149,7 +150,7 @@ async def main():
     with open('socks5_list.txt', 'r') as file:
         socks5_proxy_list = [line.strip() for line in file.readlines() if line.strip()]
 
-    tasks = [asyncio.ensure_future(connect_to_wss(i, _user_id)) for i in socks5_proxy_list]
+    tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id)) for proxy in socks5_proxy_list]
     await asyncio.gather(*tasks)
 
 if __name__ == '__main__':
