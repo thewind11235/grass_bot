@@ -131,7 +131,7 @@ async def connect_to_wss(socks5_proxy, user_id):
                         elif message.get("action") == "PONG":
                             pong_response = {"id": message["id"], "origin_action": "PONG"}
                             await websocket.send(json.dumps(pong_response))
-                            logger.debug(f"PONG response sent for proxy {socks5_proxy}: {pong_response}")
+                            logger.debug(f"{socks5_proxy}: {pong_response}")
 
                     except (websockets.ConnectionClosedError, websockets.ConnectionClosedOK) as e:
                         logger.warning(f"WebSocket connection closed: {e}")
