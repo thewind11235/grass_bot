@@ -6,12 +6,13 @@ import random
 import ssl
 import json
 import time
-import uuid
 import aiohttp
 from loguru import logger
 import websockets
 from websockets_proxy import Proxy, proxy_connect
 import os
+import uuid
+import secrets
 
 # Directory to store device ID files
 DEVICE_ID_DIR = os.path.join(os.getcwd(), "device_id")
@@ -19,6 +20,21 @@ DEVICE_ID_DIR = os.path.join(os.getcwd(), "device_id")
 # Ensure the directory exists
 if not os.path.exists(DEVICE_ID_DIR):
     os.makedirs(DEVICE_ID_DIR)
+
+# Log file for proxy errors
+ERROR_LOG_FILE = os.path.join(os.getcwd(), "grass.log")
+logger.add(ERROR_LOG_FILE, level="ERROR")
+
+def uuidv4():
+    return (
+        '{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}'.format(
+            secrets.randbits(32),
+            secrets.randbits(16),
+            secrets.randbits(12),
+            (secrets.randbits(14) | 0x8000) & 0xBFFF,
+            secrets.randbits(48)
+        )
+    )
 
 def get_device_id_file(proxy):
     sanitized_proxy = proxy.replace(":", "_").replace("/", "_").replace("@", "_")
@@ -30,7 +46,7 @@ def get_device_id(proxy):
         with open(device_id_file, "r") as file:
             return file.read().strip()
     else:
-        device_id = str(uuid.uuid4())
+        device_id = uuidv4()
         with open(device_id_file, "w") as file:
             file.write(device_id)
         return device_id
@@ -79,7 +95,7 @@ async def connect_to_wss(socks5_proxy, user_id):
                 async def send_ping():
                     while True:
                         send_message = json.dumps(
-                            {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
+                            {"id": uuidv4(), "version": "1.0.0", "action": "PING", "data": {}})
                         logger.debug(send_message)
                         await websocket.send(send_message)
                         await asyncio.sleep(60)
@@ -127,7 +143,10 @@ async def connect_to_wss(socks5_proxy, user_id):
                         continue
 
         except websockets.InvalidStatusCode as e:
-            logger.error(f"WebSocket connection failed with status code: {e.status_code}")
+            error_message = f"WebSocket connection failed with status code: {e.status_code}"
+            logger.error(error_message)
+            with open(ERROR_LOG_FILE, "a") as error_log:
+                error_log.write(f"{error_message}\n")
             if e.status_code == 4000 and "Device creation limit exceeded" in str(e):
                 backoff_time = 60  # Initial backoff time in seconds
                 while True:
@@ -138,7 +157,10 @@ async def connect_to_wss(socks5_proxy, user_id):
                         break
 
         except Exception as e:
-            logger.error(f"Unexpected error with user_id {user_id} and proxy {socks5_proxy}: {e}")
+            error_message = f"Unexpected error with user_id {user_id} and proxy {socks5_proxy}: {e}"
+            logger.error(error_message)
+            with open(ERROR_LOG_FILE, "a") as error_log:
+                error_log.write(f"{error_message}\n")
 
         logger.info("Reconnecting to WebSocket server...")
         await asyncio.sleep(5)
