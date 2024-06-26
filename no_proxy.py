@@ -7,13 +7,25 @@ import json
 import time
 import uuid
 import aiohttp
+import secrets
 
 import websockets
 from loguru import logger
 import winreg
 
-REGISTRY_KEY = r"Software\MyApp"
+REGISTRY_KEY = r"Software\Script\Grass"
 REGISTRY_VALUE = "device_id"
+
+def uuidv4():
+    return (
+        '{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}'.format(
+            secrets.randbits(32),
+            secrets.randbits(16),
+            secrets.randbits(12),
+            (secrets.randbits(14) | 0x8000) & 0xBFFF,
+            secrets.randbits(48)
+        )
+    )
 
 def get_device_id():
     try:
@@ -21,7 +33,7 @@ def get_device_id():
             device_id, _ = winreg.QueryValueEx(key, REGISTRY_VALUE)
             return device_id
     except FileNotFoundError:
-        device_id = str(uuid.uuid4())
+        device_id = uuidv4()
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY) as key:
             winreg.SetValueEx(key, REGISTRY_VALUE, 0, winreg.REG_SZ, device_id)
         return device_id
@@ -69,10 +81,10 @@ async def connect_to_wss(user_id):
                 async def send_ping():
                     while True:
                         send_message = json.dumps(
-                            {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}})
+                            {"id": uuidv4(), "version": "1.0.0", "action": "PING", "data": {}})
                         logger.debug(send_message)
                         await websocket.send(send_message)
-                        await asyncio.sleep(120)
+                        await asyncio.sleep(60)
 
                 await asyncio.sleep(1)
                 asyncio.create_task(send_ping())
