@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright © 2024 Mingdv. All rights reserved.
 
 import asyncio
@@ -11,7 +10,6 @@ from loguru import logger
 import websockets
 from websockets_proxy import Proxy, proxy_connect
 import os
-import uuid
 import secrets
 
 # Directory to store device ID files
@@ -132,8 +130,8 @@ async def connect_to_wss(socks5_proxy, user_id):
 
                         elif message.get("action") == "PONG":
                             pong_response = {"id": message["id"], "origin_action": "PONG"}
-                            logger.debug(pong_response)
                             await websocket.send(json.dumps(pong_response))
+                            logger.debug(f"PONG response sent for proxy {socks5_proxy}: {pong_response}")
 
                     except (websockets.ConnectionClosedError, websockets.ConnectionClosedOK) as e:
                         logger.warning(f"WebSocket connection closed: {e}")
@@ -143,10 +141,7 @@ async def connect_to_wss(socks5_proxy, user_id):
                         continue
 
         except websockets.InvalidStatusCode as e:
-            error_message = f"WebSocket connection failed with status code: {e.status_code}"
-            logger.error(error_message)
-            with open(ERROR_LOG_FILE, "a") as error_log:
-                error_log.write(f"{error_message}\n")
+            logger.error(f"WebSocket connection failed with status code: {e.status_code}")
             if e.status_code == 4000 and "Device creation limit exceeded" in str(e):
                 backoff_time = 60  # Initial backoff time in seconds
                 while True:
@@ -157,10 +152,7 @@ async def connect_to_wss(socks5_proxy, user_id):
                         break
 
         except Exception as e:
-            error_message = f"Unexpected error with user_id {user_id} and proxy {socks5_proxy}: {e}"
-            logger.error(error_message)
-            with open(ERROR_LOG_FILE, "a") as error_log:
-                error_log.write(f"{error_message}\n")
+            logger.error(f"Unexpected error with user_id {user_id} and proxy {socks5_proxy}: {e}")
 
         logger.info("Reconnecting to WebSocket server...")
         await asyncio.sleep(5)
