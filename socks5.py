@@ -162,7 +162,7 @@ async def main():
 
     # Read proxy list from file
     with open('socks5_list.txt', 'r') as file:
-        socks5_proxy_list = [line.strip() for line in file.readlines() if line.strip()]
+        socks5_proxy_list = [f"socks5://{line.strip()}" for line in file.readlines() if line.strip()]
 
     tasks = [asyncio.ensure_future(connect_to_wss(proxy, _user_id)) for proxy in socks5_proxy_list]
     await asyncio.gather(*tasks)
